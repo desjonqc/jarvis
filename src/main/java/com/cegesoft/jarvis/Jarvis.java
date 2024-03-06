@@ -50,7 +50,7 @@ public class Jarvis {
     }
 
     public static File getBaseFolder() {
-        return new File(isWindows() ? ("H:" + File.separator + "JARVIS" + File.separator) : System.getProperty("user.dir"));
+        return new File(isWindows() ? ("JARVIS" + File.separator) : System.getProperty("user.dir"));
     }
 
     public static EventManager getEventManager() {
