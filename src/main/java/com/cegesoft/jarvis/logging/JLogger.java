@@ -5,11 +5,12 @@ import org.slf4j.helpers.MarkerIgnoringBase;
 import org.slf4j.helpers.MessageFormatter;
 
 import java.io.PrintStream;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class JLogger extends MarkerIgnoringBase {
 
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy - HH:mm:ss");
     private static final boolean INFO = true;
     public static boolean DEBUG = true;
     public static boolean WARN = true;
@@ -18,6 +19,12 @@ public class JLogger extends MarkerIgnoringBase {
 
     public JLogger() {
         targetStream = new JPrintStreamImpl(System.out);
+    }
+
+    /**
+     * Route System.out.println calls through the logger, so that they get the same format.
+     */
+    public void redirectSystemOut() {
         System.setOut(targetStream);
     }
 
@@ -56,14 +63,17 @@ public class JLogger extends MarkerIgnoringBase {
             buf.append("] ");
 
             buf.append(message);
+            buf.append(ConsoleColor.RESET);
             this.write(buf, t);
         }
     }
 
     void write(StringBuilder buf, Throwable t) {
-        targetStream.w(buf.toString());
-        this.writeThrowable(t, targetStream);
-        targetStream.flush();
+        synchronized (targetStream) {
+            targetStream.w(buf.toString());
+            this.writeThrowable(t, targetStream);
+            targetStream.flush();
+        }
     }
 
     public void saveLine() {
@@ -92,11 +102,7 @@ public class JLogger extends MarkerIgnoringBase {
     }
 
     private String getFormattedDate() {
-        return new SimpleDateFormat("dd/MM/yyyy - HH:mm:ss").format(new Date());
-    }
-
-    private String computeShortName() {
-        return this.name.substring(this.name.lastIndexOf(".") + 1);
+        return DATE_FORMAT.format(LocalDateTime.now());
     }
 
     private void formatAndLog(int level, String format, Object arg1, Object arg2) {

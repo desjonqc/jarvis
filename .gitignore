@@ -1,0 +1,14 @@
+target/
+.idea/
+*.iml
+.env
+data/
+web/node_modules/
+web/dist/
+# Module firmwares : separate repository (github.com/desjonqc/jarvis-iot)
+jarvis-iot/
+backup-pi-*/
+# Runtime data written when the hub is run from the repository (default data dir = current directory)
+/Auth/
+/Module/
+/alerts.json

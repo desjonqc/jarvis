@@ -1,8 +1,5 @@
 package com.cegesoft.jarvis.webapi.contexts.module;
 
-import com.cegesoft.jarvis.Jarvis;
-import com.cegesoft.jarvis.events.type.module.ModuleEnableChangeEvent;
-import com.cegesoft.jarvis.events.type.module.ModuleLowSignalDetectedEvent;
 import com.cegesoft.jarvis.module.interfaces.IExternalModule;
 import com.sun.net.httpserver.HttpExchange;
 import org.json.simple.JSONObject;
@@ -23,10 +20,7 @@ public class ModuleEnableRequest extends ModuleTargetRequest {
             return;
         }
         boolean enabled = enable.equals("true");
-        module.setEnabled(enabled);
-        boolean success = Jarvis.getEventManager().waitEventUntil(ModuleEnableChangeEvent.class, ModuleLowSignalDetectedEvent.class,
-                event -> event.getModule().getId().equals(module.getId()),
-                event -> event.getModule().getId().equals(module.getId()));
+        boolean success = await(module.setEnabled(enabled));
         if (!success || module.isEnabled() == enabled) {
             send(exchange, success ? new JSONObject() : module.save(), 200);
             return;

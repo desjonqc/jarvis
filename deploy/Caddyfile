@@ -1,0 +1,16 @@
+# Web app (built into the image, see web/Dockerfile) + JARVIS API under /api, on the same origin :
+# no CORS, and the session cookie (SameSite=Strict) is sent with the API requests.
+:80 {
+	encode zstd gzip
+
+	# /api/module/list -> jarvis:8000/module/list
+	handle_path /api/* {
+		reverse_proxy jarvis:8000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

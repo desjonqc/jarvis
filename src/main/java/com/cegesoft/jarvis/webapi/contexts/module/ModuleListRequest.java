@@ -19,9 +19,21 @@ public class ModuleListRequest extends APIContext {
         JSONObject returner = new JSONObject();
         JSONArray array = new JSONArray();
         for (IExternalModule module : Jarvis.getModuleManager().getModules()) {
-            array.add(module.save());
+            array.add(describe(module));
         }
         returner.put("modules", array);
         send(exchange, returner, 200);
+    }
+
+    /**
+     * The saved state of the module, plus what the web app needs to show it.
+     */
+    @SuppressWarnings("unchecked")
+    public static JSONObject describe(IExternalModule module) {
+        JSONObject json = module.save();
+        json.put("lastSeen", module.getLastSeen());
+        json.put("connected", module.isConnected());
+        json.put("enabled", module.isEnabled());
+        return json;
     }
 }

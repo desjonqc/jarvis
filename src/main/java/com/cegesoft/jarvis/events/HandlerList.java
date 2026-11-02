@@ -2,12 +2,9 @@ package com.cegesoft.jarvis.events;
 
 import com.cegesoft.jarvis.utils.Tuple;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Predicate;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static com.cegesoft.jarvis.Jarvis.getLogger;
 
@@ -16,15 +13,15 @@ import static com.cegesoft.jarvis.Jarvis.getLogger;
  */
 public class HandlerList {
 
-    private final List<Tuple<Listener, Method>> listeners = new ArrayList<>();
-    public final ConcurrentHashMap<Object, Predicate<Object>> synchronizers = new ConcurrentHashMap<>();
+    private final CopyOnWriteArrayList<Tuple<Listener, Method>> listeners = new CopyOnWriteArrayList<>();
 
     public HandlerList() {
 
     }
 
     void addListener(Tuple<Listener, Method> method) {
-        listeners.add(method);
+        method.getB().trySetAccessible();
+        listeners.addIfAbsent(method);
     }
 
     void removeListener(Tuple<Listener, Method> method) {
@@ -32,19 +29,14 @@ public class HandlerList {
     }
 
     void callListeners(Object event) {
-        for (Tuple<Listener, Method> method : new ArrayList<>(listeners)) {
+        for (Tuple<Listener, Method> method : listeners) {
             try {
                 method.getB().invoke(method.getA(), event);
+            } catch (InvocationTargetException e) {
+                getLogger().error("Listener " + method.getA().getClass().getSimpleName() + "#" + method.getB().getName()
+                        + " failed on " + event.getClass().getSimpleName() + " : ", e.getCause());
             } catch (Exception e) {
                 getLogger().error("Can't call event : ", e);
-            }
-        }
-        for (Map.Entry<Object, Predicate<Object>> entry : synchronizers.entrySet()) {
-            if (entry.getValue().test(event)) {
-                synchronizers.remove(entry.getKey());
-                synchronized (entry.getKey()) {
-                    entry.getKey().notifyAll();
-                }
             }
         }
     }

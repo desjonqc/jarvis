@@ -1,0 +1,51 @@
+name: jarvis
+
+services:
+  jarvis:
+    build: .
+    image: jarvis:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      JARVIS_DATA_DIR: /data
+      TZ: ${TZ:-Europe/Paris}
+    volumes:
+      - ./data:/data
+    # nRF24 wired on the GPIO header : SPI bus 0 (CE0) and the GPIO chip (CE and IRQ pins).
+    # /dev/spidev0.0 exists once SPI is enabled (dtparam=spi=on, done by setup.sh, then reboot).
+    devices:
+      - /dev/spidev0.0:/dev/spidev0.0
+      - /dev/gpiochip0:/dev/gpiochip0
+    # Groups owning these devices on the host (numbers detected by setup.sh)
+    group_add:
+      - "${SPI_GID:-999}"
+      - "${GPIO_GID:-997}"
+    ports:
+      # Direct API access for scripts (API key). The web app goes through Caddy (/api) :
+      # set JARVIS_API_PUBLISH=127.0.0.1:8000 in .env if no script needs it.
+      - "${JARVIS_API_PUBLISH:-8000}:8000"
+    stop_grace_period: 30s
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    # The web app (./web) built in the image, served by Caddy
+    build: ./web
+    image: jarvis-web:latest
+    restart: unless-stopped
+    depends_on:
+      - jarvis
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:

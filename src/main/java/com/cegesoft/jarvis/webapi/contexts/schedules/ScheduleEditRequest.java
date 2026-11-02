@@ -17,14 +17,15 @@ public class ScheduleEditRequest extends APIContext {
 
     @Override
     protected void handleRequest(HttpExchange exchange) throws IOException {
+        JSONArray schedules;
         try {
-            JSONArray object = (JSONArray) new JSONParser().parse(this.readBody(exchange));
-            Jarvis.getModuleManager().getScheduleManager().updateSchedules(object, true);
-            this.send(exchange, new JSONObject(), 200);
+            schedules = (JSONArray) new JSONParser().parse(this.readBody(exchange));
+            Jarvis.getModuleManager().getScheduleManager().updateSchedules(schedules, true);
+        } catch (ParseException | ClassCastException | IllegalArgumentException e) {
+            Jarvis.getLogger().warn("Invalid schedules received : " + e.getMessage());
+            this.send(exchange, BAD_REQUEST_ERROR, 400);
             return;
-        } catch (ParseException e) {
-            e.printStackTrace();
         }
-        this.send(exchange, BAD_REQUEST_ERROR, 400);
+        this.send(exchange, new JSONObject(), 200);
     }
 }

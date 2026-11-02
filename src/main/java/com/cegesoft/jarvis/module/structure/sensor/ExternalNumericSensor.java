@@ -6,6 +6,8 @@ import com.cegesoft.jarvis.module.ModuleType;
 import com.cegesoft.jarvis.module.interfaces.IExternalSensor;
 import com.cegesoft.jarvis.module.structure.ExternalModule;
 import com.cegesoft.jarvis.properties.SavedItem;
+import com.cegesoft.jarvis.radio.protocol.Frame;
+import com.cegesoft.jarvis.radio.protocol.Opcode;
 
 /**
  * Created by HoxiSword on 15/05/2020 for JARVIS
@@ -13,7 +15,7 @@ import com.cegesoft.jarvis.properties.SavedItem;
 public abstract class ExternalNumericSensor extends ExternalModule implements IExternalSensor<Integer> {
 
     @SavedItem
-    protected int sensorValue = 0;
+    protected volatile int sensorValue = 0;
 
     public ExternalNumericSensor(String id, ModuleType type) {
         super(id, type);
@@ -23,15 +25,10 @@ public abstract class ExternalNumericSensor extends ExternalModule implements IE
     }
 
     @Override
-    protected void stateChanged(ModuleState state) {}
-
-    @Override
-    public void registerCommands() {
-        this.registerCommand("value", this::onCommandValue);
-    }
-
-    private void onCommandValue(String args) {
-        sensorValue = Integer.parseInt(args);
+    protected void handleFrame(Frame frame) {
+        if (frame.opcode() != Opcode.ANALOG)
+            return;
+        sensorValue = frame.reader().u16();
         Jarvis.getEventManager().callEvent(new SensorUpdateValueEvent(this));
     }
 

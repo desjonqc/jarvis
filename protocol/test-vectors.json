@@ -1,0 +1,15 @@
+[
+  {"name": "SET_STATE ON to node 0x12 (request)", "hex": "1200622a1101",
+   "dst": 18, "src": 0, "ackRequested": true, "reply": false, "ttl": 2, "seq": 42, "op": 17, "payload": "01"},
+  {"name": "STATE ON reply from node 0x12", "hex": "0012522a1301",
+   "dst": 0, "src": 18, "ackRequested": false, "reply": true, "ttl": 2, "seq": 42, "op": 19, "payload": "01"},
+  {"name": "PULSE_EVT counter 300, battery 6.2V/5.9V 21C power-on", "hex": "00036207222c01f8ec1501",
+   "dst": 0, "src": 3, "ackRequested": true, "reply": false, "ttl": 2, "seq": 7, "op": 34, "payload": "2c01f8ec1501"},
+  {"name": "HELLO pulse switch, fw 1, sleeps+battery", "hex": "0003620101040106",
+   "dst": 0, "src": 3, "ackRequested": true, "reply": false, "ttl": 2, "seq": 1, "op": 1, "payload": "040106"},
+  {"name": "truncated header (4 bytes)", "hex": "ff004280",
+   "invalid": true},
+  {"name": "DISCOVER broadcast", "hex": "ff00420007",
+   "dst": 255, "src": 0, "ackRequested": false, "reply": false, "ttl": 2, "seq": 0, "op": 7, "payload": ""},
+  {"name": "wrong protocol version", "hex": "0003a20101", "invalid": true}
+]

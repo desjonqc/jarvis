@@ -6,7 +6,23 @@ import com.cegesoft.jarvis.module.structure.ExternalActivator;
 import com.cegesoft.jarvis.module.structure.ExternalModule;
 import org.json.simple.JSONObject;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
 public abstract class ModuleScheduleElement {
+
+    /**
+     * Wait for the module's confirmation, so that the next elements (e.g. WAIT) start after the action really happened.
+     */
+    static void await(CompletableFuture<?> command, String description) {
+        try {
+            command.get(Jarvis.getConfig().getCommandTimeoutMs(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            Jarvis.getLogger().warn("Schedule : " + description + " failed : " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage()));
+        }
+    }
 
     public static ModuleScheduleElement load(JSONObject elemObj) throws Exception {
         ModuleSchedule.ScheduleElementType type = ModuleSchedule.ScheduleElementType.valueOf((String) elemObj.get("type"));
@@ -37,7 +53,7 @@ public abstract class ModuleScheduleElement {
             try {
                 Thread.sleep(timing);
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
             }
         }
     }
@@ -56,7 +72,7 @@ public abstract class ModuleScheduleElement {
         public void execute() {
             ExternalModule module = Jarvis.getModuleManager().getModule(this.moduleId);
             if (module != null && module.isConnected() && (module.isEnabled() != enable)) {
-                module.setEnabled(enable);
+                await(module.setEnabled(enable), (enable ? "enable " : "disable ") + moduleId);
             }
         }
     }
@@ -71,11 +87,15 @@ public abstract class ModuleScheduleElement {
             this.state = state;
         }
 
+        public String getModuleId() {
+            return moduleId;
+        }
+
         @Override
         public void execute() {
             ExternalModule module = Jarvis.getModuleManager().getModule(this.moduleId);
             if (module instanceof ExternalActivator && module.isConnected()) {
-                ((ExternalActivator) module).write(state);
+                await(((ExternalActivator) module).write(state), "set " + moduleId + " to " + state);
             }
         }
     }

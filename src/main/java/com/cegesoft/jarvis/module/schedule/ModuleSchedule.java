@@ -1,6 +1,5 @@
 package com.cegesoft.jarvis.module.schedule;
 
-import lombok.Getter;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
@@ -9,11 +8,8 @@ import java.util.List;
 
 public class ModuleSchedule {
 
-    @Getter
     private final JSONObject json;
-    @Getter
     private final ModuleScheduleEvent event;
-    @Getter
     private final List<ModuleScheduleElement> elements;
 
     public ModuleSchedule(JSONObject json, ModuleScheduleEvent event, List<ModuleScheduleElement> elements) {
@@ -22,23 +18,41 @@ public class ModuleSchedule {
         this.elements = elements;
     }
 
-    public static List<ModuleSchedule> load(JSONArray json) {
-        List<ModuleSchedule> schedules = new ArrayList<>();
-        for (Object obj : json) {
-            try {
-                JSONObject object = (JSONObject) obj;
-                JSONObject event = (JSONObject) object.get("event");
-                JSONArray elem = (JSONArray) object.get("elements");
-                List<ModuleScheduleElement> elements = new ArrayList<>();
-                for (Object elemObj : elem) {
-                    elements.add(ModuleScheduleElement.load((JSONObject) elemObj));
-                }
-                schedules.add(new ModuleSchedule(object, ModuleScheduleEvent.load(event), elements));
-            } catch (Exception e) {
-                e.printStackTrace();
+    /**
+     * @throws IllegalArgumentException if the json doesn't describe a valid schedule
+     */
+    public static ModuleSchedule load(Object obj) {
+        try {
+            JSONObject object = (JSONObject) obj;
+            JSONObject event = (JSONObject) object.get("event");
+            JSONArray elem = (JSONArray) object.get("elements");
+            List<ModuleScheduleElement> elements = new ArrayList<>();
+            for (Object elemObj : elem) {
+                elements.add(ModuleScheduleElement.load((JSONObject) elemObj));
             }
+            return new ModuleSchedule(object, ModuleScheduleEvent.load(event), elements);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid schedule " + obj + " : " + e, e);
         }
-        return schedules;
+    }
+
+    /**
+     * @return false if the user paused this schedule in the web app ("enabled": false)
+     */
+    public boolean isEnabled() {
+        return !Boolean.FALSE.equals(json.get("enabled"));
+    }
+
+    public JSONObject getJson() {
+        return json;
+    }
+
+    public ModuleScheduleEvent getEvent() {
+        return event;
+    }
+
+    public List<ModuleScheduleElement> getElements() {
+        return elements;
     }
 
     public enum ScheduleElementType {

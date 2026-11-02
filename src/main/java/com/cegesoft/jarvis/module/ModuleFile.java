@@ -1,76 +1,64 @@
 package com.cegesoft.jarvis.module;
 
-import com.cegesoft.jarvis.Jarvis;
 import com.cegesoft.jarvis.module.interfaces.IExternalModule;
+import com.cegesoft.jarvis.utils.JsonFile;
+import com.cegesoft.jarvis.utils.ReflectionUtil;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static com.cegesoft.jarvis.Jarvis.getLogger;
 
 public class ModuleFile {
 
-    private final File file;
-    private JSONArray json;
+    private final JsonFile file;
+    // Entries which couldn't be loaded are written back as they were, so that a bug can't erase a module's configuration.
+    private final List<Object> unloadable = new ArrayList<>();
 
-    public ModuleFile() {
-        this.file = new File(Jarvis.getBaseFolder(), "Module/modules.json");
-        try {
-            if (!this.file.exists()) {
-                if (this.file.getParentFile().isDirectory() && !this.file.getParentFile().exists() && !this.file.getParentFile().mkdirs()) {
-                    getLogger().error("Can't create action folder");
-                    return;
-                }
-                if (!this.file.createNewFile()) {
-                    getLogger().error("Can't create action file");
-                    return;
-                }
-                this.json = new JSONArray();
-            } else {
-                this.json = (JSONArray)new JSONParser().parse(new FileReader(file));
-            }
-        } catch (IOException | ParseException e) {
-            e.printStackTrace();
-        }
+    public ModuleFile(File dataDir) {
+        this.file = new JsonFile(new File(dataDir, "Module/modules.json").toPath());
     }
 
-    public void saveModules() {
-        json = new JSONArray();
-        for (IExternalModule module : Jarvis.getModuleManager().getModules()) {
+    @SuppressWarnings("unchecked")
+    public synchronized void saveModules(Collection<IExternalModule> modules) {
+        JSONArray json = new JSONArray();
+        for (IExternalModule module : modules) {
             JSONObject object = new JSONObject();
             object.put("module", module.save());
             object.put("class", module.getClass().getName());
             json.add(object);
         }
-        try (FileWriter writer = new FileWriter(file)) {
-            writer.write(json.toString());
-            writer.flush();
+        json.addAll(unloadable);
+        try {
+            file.write(json);
         } catch (IOException e) {
-            Jarvis.getLogger().error("Can't save WordFile : ", e);
+            getLogger().error("Can't save modules in " + file.getPath() + " : ", e);
         }
     }
 
-    public HashMap<String, IExternalModule> loadModules(){
-        HashMap<String, IExternalModule> modules = new HashMap<>();
-        for (Object obj : this.json) {
+    public synchronized Map<String, IExternalModule> loadModules() {
+        unloadable.clear();
+        Map<String, IExternalModule> modules = new HashMap<>();
+        for (Object obj : file.readArray()) {
             try {
                 JSONObject object = (JSONObject) obj;
-                Class<? extends IExternalModule> tClass = (Class<? extends IExternalModule>) Class.forName((String) object.get("class"));
-                IExternalModule module = tClass.getConstructor().newInstance();
-                module.load((JSONObject)object.get("module"));
+                Class<? extends IExternalModule> tClass = Class.forName((String) object.get("class")).asSubclass(IExternalModule.class);
+                IExternalModule module = ReflectionUtil.newInstance(tClass);
+                module.load((JSONObject) object.get("module"));
                 modules.put(module.getId(), module);
-            } catch (ClassNotFoundException | NoSuchMethodException | InvocationTargetException | InstantiationException | IllegalAccessException e) {
-                e.printStackTrace();
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                unloadable.add(obj);
+                getLogger().error("Can't load module " + obj + " : ", e);
             }
         }
+        getLogger().info(modules.size() + " module(s) loaded.");
         return modules;
     }
 

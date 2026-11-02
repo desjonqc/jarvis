@@ -4,9 +4,13 @@ import com.cegesoft.jarvis.module.ModuleType;
 import com.cegesoft.jarvis.module.activator.ActivatorState;
 import com.cegesoft.jarvis.module.structure.ExternalActivator;
 import com.cegesoft.jarvis.properties.IAutoSerializable;
+import com.cegesoft.jarvis.radio.protocol.Opcode;
 
-import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 
+/**
+ * A relay pulsed to toggle a remote switch (télérupteur) : its real state is unknown, every request is a toggle.
+ */
 public class PulseRelayActivator extends ExternalActivator {
     public PulseRelayActivator(String id, ModuleType type) {
         super(id, type);
@@ -14,19 +18,17 @@ public class PulseRelayActivator extends ExternalActivator {
 
     public PulseRelayActivator() {}
 
-
-    @Override
-    public void postLoad() {
-        super.postLoad();
-    }
-
-    public void pulse() {
-        this.executeCommand("state", new Random().nextInt(100), true);
+    /**
+     * Every pulse counts (two quick presses = two toggles) : never coalesced. The radio seq guarantees that a
+     * retransmitted pulse is not executed twice.
+     */
+    public CompletableFuture<?> pulse() {
+        return this.request(Opcode.PULSE, false);
     }
 
     @Override
-    public void write(ActivatorState state) {
-        this.pulse();
+    public CompletableFuture<?> write(ActivatorState state) {
+        return this.pulse();
     }
 
     @Override

@@ -6,39 +6,26 @@ import com.cegesoft.jarvis.module.ModuleType;
 import com.cegesoft.jarvis.module.interfaces.IExternalSensor;
 import com.cegesoft.jarvis.module.structure.ExternalModule;
 import com.cegesoft.jarvis.properties.SavedItem;
+import com.cegesoft.jarvis.radio.protocol.Frame;
+import com.cegesoft.jarvis.radio.protocol.Opcode;
 
 public abstract class ExternalBooleanSensor extends ExternalModule implements IExternalSensor<Boolean> {
 
     @SavedItem
-    protected boolean sensorValue = false;
+    protected volatile boolean sensorValue = false;
 
     public ExternalBooleanSensor(String id, ModuleType type) {
         super(id, type);
-
     }
 
     public ExternalBooleanSensor() {
     }
 
     @Override
-    protected void stateChanged(ModuleState state) {}
-
-    @Override
-    public void postLoad() {
-        super.postLoad();
-        this.registerCommand("value", args -> {
-            sensorValue = Boolean.parseBoolean(args);
-            Jarvis.getEventManager().callEvent(new SensorUpdateValueEvent(this));
-        });
-    }
-
-    @Override
-    public void registerCommands() {
-        this.registerCommand("value", this::onCommandValue);
-    }
-
-    private void onCommandValue(String args) {
-        sensorValue = Boolean.parseBoolean(args);
+    protected void handleFrame(Frame frame) {
+        if (frame.opcode() != Opcode.SWITCH)
+            return;
+        sensorValue = frame.reader().u8() != 0;
         Jarvis.getEventManager().callEvent(new SensorUpdateValueEvent(this));
     }
 

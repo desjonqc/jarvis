@@ -10,25 +10,6 @@ import java.util.List;
  */
 public class ReflectionUtil {
 
-    public static Field getField(Class<?> tClass, String name) {
-        try {
-            return tClass.getField(name);
-        } catch (NoSuchFieldException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    public static Method getMethod(Class<?> tClass, String name, Class<?>... args) {
-        try {
-            return tClass.getMethod(name, args);
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-
     /**
      * Get all fields of a class (including fields of parent.). Ascending parents to exclusiveParent.
      *
@@ -36,21 +17,17 @@ public class ReflectionUtil {
      * @param exclusiveParent parent class
      * @return all field declared or not of a class
      */
-    public static Iterable<Field> getFieldsUpTo(Class<?> startClass, Class<?> exclusiveParent) {
-
-        List<Field> currentClassFields = new ArrayList<>(Arrays.asList(startClass.getDeclaredFields()));
-        Class<?> parentClass = startClass.getSuperclass();
-
-        if (parentClass != null && (!(parentClass.equals(exclusiveParent)))) {
-            List<Field> parentClassFields = (List<Field>) getFieldsUpTo(parentClass, exclusiveParent);
-            currentClassFields.addAll(parentClassFields);
-        }
-
-        return currentClassFields;
+    public static List<Field> getFieldsUpTo(Class<?> startClass, Class<?> exclusiveParent) {
+        List<Field> fields = new ArrayList<>();
+        for (Class<?> current = startClass; current != null && !current.equals(exclusiveParent); current = current.getSuperclass())
+            fields.addAll(Arrays.asList(current.getDeclaredFields()));
+        return fields;
     }
 
-    public static <T> T newInstance(Class<T> tClass) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
-        return tClass.getConstructor().newInstance();
+    public static <T> T newInstance(Class<T> tClass) throws ReflectiveOperationException {
+        Constructor<T> constructor = tClass.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        return constructor.newInstance();
     }
 
     public static Class<?> getGenericClass(Field field, int index) {
@@ -59,7 +36,8 @@ public class ReflectionUtil {
             ParameterizedType type = (ParameterizedType) genericType;
             if (type.getActualTypeArguments().length <= index)
                 return null;
-            return ((Class<?>)type.getActualTypeArguments()[index]);
+            Type argument = type.getActualTypeArguments()[index];
+            return argument instanceof Class ? (Class<?>) argument : null;
         }
         return null;
     }

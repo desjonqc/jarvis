@@ -1,58 +1,35 @@
 package com.cegesoft.jarvis.module.schedule;
 
-import com.cegesoft.jarvis.Jarvis;
+import com.cegesoft.jarvis.utils.JsonFile;
 import org.json.simple.JSONArray;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.util.List;
 
 import static com.cegesoft.jarvis.Jarvis.getLogger;
 
 public class ModuleScheduleFile {
 
-    private final File file;
-    private JSONArray json;
+    private final JsonFile file;
 
-    public ModuleScheduleFile() {
-        this.file = new File(Jarvis.getBaseFolder(), "Module/schedules.json");
+    public ModuleScheduleFile(File dataDir) {
+        this.file = new JsonFile(new File(dataDir, "Module/schedules.json").toPath());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void saveSchedules(List<?> schedulesJson) {
+        JSONArray json = new JSONArray();
+        json.addAll(schedulesJson);
         try {
-            if (!this.file.exists()) {
-                if (this.file.getParentFile().isDirectory() && !this.file.getParentFile().exists() && !this.file.getParentFile().mkdirs()) {
-                    getLogger().error("Can't create action folder");
-                    return;
-                }
-                if (!this.file.createNewFile()) {
-                    getLogger().error("Can't create action file");
-                    return;
-                }
-                this.json = new JSONArray();
-            } else {
-                this.json = (JSONArray)new JSONParser().parse(new FileReader(file));
-            }
-        } catch (IOException | ParseException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void saveSchedules() {
-        json = new JSONArray();
-        for (ModuleSchedule module : Jarvis.getModuleManager().getScheduleManager().getSchedules()) {
-            json.add(module.getJson());
-        }
-        try (FileWriter writer = new FileWriter(file)) {
-            writer.write(json.toString());
-            writer.flush();
+            file.write(json);
         } catch (IOException e) {
-            Jarvis.getLogger().error("Can't save WordFile : ", e);
+            getLogger().error("Can't save schedules in " + file.getPath() + " : ", e);
         }
     }
 
-    public JSONArray loadSchedules(){
-        return this.json;
+    public JSONArray loadSchedules() {
+        return file.readArray();
     }
 
 }

@@ -7,13 +7,13 @@ import static com.cegesoft.jarvis.Jarvis.getLogger;
  */
 public abstract class Service {
 
-    private State state;
+    private volatile State state;
 
     public Service() {
         this.state = State.STOPPED;
     }
 
-    public void start() {
+    public synchronized void start() {
         if (!this.state.equals(State.STOPPED))
             return;
         this.state = State.STARTING;
@@ -23,11 +23,11 @@ public abstract class Service {
             getLogger().info(this.getClass().getSimpleName() + " successfully started !");
         } catch (Exception e) {
             this.state = State.STOPPED;
-            getLogger().warn(this.getClass().getSimpleName() + " thrown an exception while starting : " + e.getMessage());
+            getLogger().error(this.getClass().getSimpleName() + " thrown an exception while starting : ", e);
         }
     }
 
-    public void stop() {
+    public synchronized void stop() {
         if (!this.state.equals(State.RUNNING))
             return;
         this.state = State.STOPPING;
@@ -35,7 +35,7 @@ public abstract class Service {
             stopService();
             getLogger().info(this.getClass().getSimpleName() + " successfully stopped !");
         } catch (Exception e) {
-            getLogger().warn(this.getClass().getSimpleName() + " thrown an exception while stopping : " + e.getMessage());
+            getLogger().warn(this.getClass().getSimpleName() + " thrown an exception while stopping : ", e);
         }
         this.state = State.STOPPED;
     }
@@ -44,7 +44,7 @@ public abstract class Service {
         return state;
     }
 
-    protected abstract void startService();
+    protected abstract void startService() throws Exception;
     protected abstract void stopService();
 
     public enum State {

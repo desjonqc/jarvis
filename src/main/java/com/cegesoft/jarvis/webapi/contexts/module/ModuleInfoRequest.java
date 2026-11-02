@@ -14,6 +14,6 @@ public class ModuleInfoRequest extends ModuleTargetRequest {
 
     @Override
     public void handleRequest(HttpExchange exchange, IExternalModule module) throws IOException {
-        send(exchange, module.save(), 200);
+        send(exchange, ModuleListRequest.describe(module), 200);
     }
 }

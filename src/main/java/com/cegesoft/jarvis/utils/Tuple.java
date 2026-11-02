@@ -1,26 +1,19 @@
 package com.cegesoft.jarvis.utils;
 
-import com.cegesoft.jarvis.properties.IAutoSerializable;
-import com.cegesoft.jarvis.properties.SavedItem;
-
 import java.util.Objects;
 
 /**
  * Created by HoxiSword on 14/04/2020 for JARVIS
  */
-public class Tuple<A, B> implements IAutoSerializable {
+public class Tuple<A, B> {
 
-    @SavedItem
-    private A a;
-    @SavedItem
-    private B b;
+    private final A a;
+    private final B b;
 
     public Tuple(A a, B b) {
         this.a = a;
         this.b = b;
     }
-
-    private Tuple() {}
 
     public A getA() {
         return a;
@@ -42,10 +35,5 @@ public class Tuple<A, B> implements IAutoSerializable {
     @Override
     public int hashCode() {
         return Objects.hash(a, b);
-    }
-
-    @Override
-    public IAutoSerializable getBase() {
-        return this;
     }
 }

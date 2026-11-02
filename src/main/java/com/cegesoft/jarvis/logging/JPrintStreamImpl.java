@@ -13,15 +13,8 @@ public class JPrintStreamImpl extends PrintStream {
 
     @Override
     public void println(String x) {
-        if (Jarvis.getLogger() == null){
-            super.println(x);
-            return;
-        }
-        if (x.contains("\n")){
-            for (String s : x.split("\n"))
-                Jarvis.getLogger().info(s);
-        } else
-            Jarvis.getLogger().info(x);
+        for (String s : String.valueOf(x).split("\n"))
+            Jarvis.getLogger().info(s);
     }
 
     public void w(String s){

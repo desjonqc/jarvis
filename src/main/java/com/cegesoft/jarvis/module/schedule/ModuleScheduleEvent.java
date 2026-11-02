@@ -3,23 +3,26 @@ package com.cegesoft.jarvis.module.schedule;
 import com.cegesoft.jarvis.Jarvis;
 import com.cegesoft.jarvis.events.Event;
 import com.cegesoft.jarvis.events.type.EventCalledEvent;
+import com.cegesoft.jarvis.events.type.TimeTickEvent;
 import com.cegesoft.jarvis.events.type.module.ModuleEnableChangeEvent;
 import com.cegesoft.jarvis.events.type.module.sensor.SensorPulseEvent;
 import com.cegesoft.jarvis.events.type.module.sensor.SensorUpdateValueEvent;
 import com.cegesoft.jarvis.module.ModuleType;
+import com.cegesoft.jarvis.module.interfaces.IExternalModule;
 import com.cegesoft.jarvis.task.TaskId;
 import com.cegesoft.jarvis.task.TaskManager;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
 
 public abstract class ModuleScheduleEvent {
 
-    private boolean hasPassed = false;
-    private TaskId resetTask;
+    private volatile boolean hasPassed = false;
+    private volatile TaskId resetTask;
 
     public static ModuleScheduleEvent load(JSONObject event) throws Exception {
         ModuleSchedule.ScheduleEventType type = ModuleSchedule.ScheduleEventType.valueOf((String) event.get("type"));
@@ -80,15 +83,13 @@ public abstract class ModuleScheduleEvent {
 
         @Override
         public boolean _passEvent(Event event) {
-            boolean passed = combination.equals("and");
+            Event called = ((EventCalledEvent) event).getEventCalled();
+            boolean and = combination.equals("and");
+            boolean passed = and;
+            // Every sub event sees the event (no short-circuit) : each one has to remember that it passed.
             for (ModuleScheduleEvent e : events) {
-                if (combination.equals("and")) {
-                    passed = passed && e.passEvent(((EventCalledEvent) event).getEventCalled());
-                } else {
-                    passed = e.passEvent(((EventCalledEvent) event).getEventCalled());
-                    if (passed)
-                        break;
-                }
+                boolean subPassed = e.passEvent(called);
+                passed = and ? passed && subPassed : passed || subPassed;
             }
             return passed;
         }
@@ -133,44 +134,64 @@ public abstract class ModuleScheduleEvent {
             this.value = value;
         }
 
+        public String getModuleId() {
+            return moduleId;
+        }
+
+        /**
+         * @return the type of the module, or null if it is unknown (not connected yet)
+         */
         private ModuleType getType() {
-            return Jarvis.getModuleManager().getModule(moduleId).getType();
+            IExternalModule module = Jarvis.getModuleManager().getModule(moduleId);
+            return module == null ? null : module.getType();
         }
 
         @Override
         public Class<? extends Event> getEventClass() {
-            try {
-                switch (this.getType()) {
-                    case PULSE_SWITCH_SENSOR:
-                        return SensorPulseEvent.class;
-                    case SWITCH_SENSOR:
-                    case LIGHT_SENSOR:
-                        return SensorUpdateValueEvent.class;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
+            ModuleType type = this.getType();
+            if (type == null)
+                return null;
+            switch (type) {
+                case PULSE_SWITCH_SENSOR:
+                    return SensorPulseEvent.class;
+                case SWITCH_SENSOR:
+                case LIGHT_SENSOR:
+                    return SensorUpdateValueEvent.class;
             }
             return null;
         }
 
         @Override
         protected boolean _passEvent(Event event) {
-            switch (this.getType()) {
-                case PULSE_SWITCH_SENSOR:
-                    return ((SensorPulseEvent) event).getSensor().getId().equals(moduleId);
-                case LIGHT_SENSOR:
-                case SWITCH_SENSOR:
-                    SensorUpdateValueEvent sEvent = (SensorUpdateValueEvent) event;
-                    if (!sEvent.getSensor().getId().equals(moduleId))
-                        return false;
-                    return (comparator == 0 && value.equals(sEvent.getSensor().getSensorValue())) || (comparator == Float.compare((float) value, (Float) sEvent.getSensor().getSensorValue()));
+            if (event instanceof SensorPulseEvent)
+                return ((SensorPulseEvent) event).getSensor().getId().equals(moduleId);
+            if (event instanceof SensorUpdateValueEvent) {
+                SensorUpdateValueEvent sEvent = (SensorUpdateValueEvent) event;
+                return sEvent.getSensor().getId().equals(moduleId) && matches(sEvent.getSensor().getSensorValue());
             }
             return false;
         }
+
+        /**
+         * comparator 0 : the sensor value equals the expected value.
+         * comparator -1 / 1 : the expected value is lower / greater than the sensor value (numeric sensors).
+         */
+        boolean matches(Object sensorValue) {
+            if (value instanceof Number && sensorValue instanceof Number) {
+                int comparison = Integer.signum(Double.compare(((Number) value).doubleValue(), ((Number) sensorValue).doubleValue()));
+                return comparison == comparator;
+            }
+            return comparator == 0 && sensorValue != null && String.valueOf(value).equals(String.valueOf(sensorValue));
+        }
     }
 
+    /**
+     * Alone, triggers once a day when the given hour starts (local time, see the TZ variable).
+     * Inside a combination, it is a condition : "the current hour is the given hour".
+     */
     public static class TimeScheduleEvent extends ModuleScheduleEvent {
         private final int hour;
+        private volatile LocalDate lastTrigger;
 
         public TimeScheduleEvent(int hour) {
             this.hour = hour;
@@ -178,12 +199,24 @@ public abstract class ModuleScheduleEvent {
 
         @Override
         public Class<? extends Event> getEventClass() {
-            return EventCalledEvent.class;
+            return TimeTickEvent.class;
+        }
+
+        @Override
+        public boolean passEvent(Event event) {
+            if (!(event instanceof TimeTickEvent))
+                return LocalTime.now().getHour() == hour;
+            return _passEvent(event);
         }
 
         @Override
         protected boolean _passEvent(Event event) {
-            return (Calendar.getInstance().get(Calendar.HOUR_OF_DAY) + 1) % 24 == hour;
+            TimeTickEvent tick = (TimeTickEvent) event;
+            LocalDate today = tick.getTime().toLocalDate();
+            if (tick.getTime().getHour() != hour || today.equals(lastTrigger))
+                return false;
+            lastTrigger = today;
+            return true;
         }
     }
 

@@ -2,148 +2,128 @@ package com.cegesoft.jarvis.task;
 
 import com.cegesoft.jarvis.Jarvis;
 
-import java.util.*;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Created by HoxiSword on 25/05/2020 for JARVIS
+ * <p>
+ * A single scheduler thread keeps the timing, and every execution runs on its own virtual thread :
+ * tasks may block (serial I/O, waits in schedules) without delaying the other ones, and no thread sits idle.
  */
 public class TaskManager {
 
-    private final ConcurrentHashMap<TaskId, Task> tasks = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<TaskId, Date> program = new ConcurrentHashMap<>();
-    private Thread thread;
-    private boolean started;
+    private final Map<TaskId, ScheduledFuture<?>> tasks = new ConcurrentHashMap<>();
+    // Makes "schedule then register" atomic : a one-shot task firing immediately must not unregister itself before it is registered.
+    private final Object registrationLock = new Object();
+    private ScheduledThreadPoolExecutor scheduler;
+    private ExecutorService workers;
 
     public TaskManager() {
 
     }
 
-    public void start() {
-        if (started)
+    public synchronized void start() {
+        if (scheduler != null)
             return;
-        this.thread = new Thread(() -> {
-            while (started) {
-                try {
-                    Calendar calendar = Calendar.getInstance();
-                    List<TaskId> launched = new ArrayList<>();
-                    for (Map.Entry<TaskId, Date> entry : program.entrySet()) {
-                        Calendar current = Calendar.getInstance();
-                        current.setTime(entry.getValue());
-                        if (calendar.after(current)) {
-                            tasks.get(entry.getKey()).start();
-                            launched.add(entry.getKey());
-                        }
-                    }
-                    launched.forEach(program::remove);
-                    this.tasks.entrySet().stream().filter(entry -> entry.getValue().getInfo().getState() == Task.TaskState.INTERRUPT).forEach(entry -> {
-                        this.tasks.remove(entry.getKey());
-                    });
-                    Thread.sleep(100);
-                } catch (InterruptedException ignored) {
-                    started = false;
-                }
+        this.scheduler = new ScheduledThreadPoolExecutor(1, runnable -> {
+            Thread thread = new Thread(runnable, "TASK-SCHEDULER");
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.scheduler.setRemoveOnCancelPolicy(true);
+        this.workers = Executors.newVirtualThreadPerTaskExecutor();
+    }
+
+    public synchronized void stop() {
+        if (scheduler == null)
+            return;
+        this.scheduler.shutdownNow();
+        this.workers.shutdownNow();
+        this.tasks.clear();
+    }
+
+    /**
+     * Run a task on a virtual thread right now, without scheduling.
+     */
+    public void execute(Runnable runnable, String name) {
+        workers.execute(wrap(runnable, name));
+    }
+
+    private Runnable wrap(Runnable runnable, String name) {
+        return () -> {
+            Thread.currentThread().setName(name);
+            try {
+                runnable.run();
+            } catch (Throwable t) {
+                Jarvis.getLogger().error("Task " + name + " failed : ", t);
             }
-        }, "TASK-LAUNCHER");
-        this.started = true;
-        this.thread.start();
+        };
     }
 
-    public static Task getTask(TaskId id) {
-        if (id == null)
-            return null;
-        return Jarvis.getTaskManager().tasks.getOrDefault(id, null);
-    }
-
-    public static TaskInfo getTaskInfo(TaskId id) {
-        if (getTask(id) == null) {
-            return new TaskInfo();
+    private TaskId schedule(Runnable runnable, String name, long delay, long timer) {
+        TaskId id = TaskId.generate();
+        Runnable task = wrap(runnable, name == null ? id.getThreadName() : name);
+        synchronized (registrationLock) {
+            ScheduledFuture<?> future;
+            if (timer > 0) {
+                future = scheduler.scheduleWithFixedDelay(() -> workers.execute(task), delay, timer, TimeUnit.MILLISECONDS);
+            } else {
+                future = scheduler.schedule(() -> {
+                    synchronized (registrationLock) {
+                        tasks.remove(id);
+                    }
+                    workers.execute(task);
+                }, delay, TimeUnit.MILLISECONDS);
+            }
+            tasks.put(id, future);
         }
-        return getTask(id).getInfo();
+        return id;
     }
 
-    public void stop() {
-        if (!started || this.thread == null)
-            return;
-        this.thread.interrupt();
-    }
-
-    public static TaskId scheduleTaskAt(Runnable runnable, Date date) {
-        return scheduleTaskAt(runnable, null, date);
-    }
-
-    public static TaskId scheduleTaskLaterAt(Runnable runnable, long delay, Date date) {
-        return scheduleTaskLaterAt(runnable, null, delay, date);
-    }
-
-    public static TaskId scheduleTaskTimerAt(Runnable runnable, long delay, long timer, Date date) {
-        return scheduleTaskTimerAt(runnable, null, delay, timer, date);
-    }
-
-    public static TaskId scheduleTask(TaskParameter parameter) {
-        return scheduleTask(parameter, null);
+    public static boolean isScheduled(TaskId id) {
+        return id != null && Jarvis.getTaskManager().tasks.containsKey(id);
     }
 
     public static TaskId scheduleTask(Runnable runnable) {
-        return scheduleTaskAt(runnable, new Date());
+        return scheduleTask(runnable, null);
     }
 
     public static TaskId scheduleTaskLater(Runnable runnable, long delay) {
-        return scheduleTaskLaterAt(runnable, delay, new Date());
+        return scheduleTaskLater(runnable, null, delay);
     }
 
     public static TaskId scheduleTaskTimer(Runnable runnable, long delay, long timer) {
-        return scheduleTaskTimerAt(runnable, delay, timer, new Date());
-    }
-
-    public static TaskId scheduleTaskAt(Runnable runnable, String name, Date date) {
-        TaskManager manager = Jarvis.getTaskManager();
-        TaskId id = TaskId.generate();
-        manager.tasks.put(id, new Task(id, runnable, 0).setTaskName(name));
-        manager.program.put(id, date);
-        return id;
-    }
-
-    public static TaskId scheduleTaskLaterAt(Runnable runnable, String name, long delay, Date date) {
-        TaskManager manager = Jarvis.getTaskManager();
-        TaskId id = TaskId.generate();
-        manager.tasks.put(id, new Task(id, runnable, delay).setTaskName(name));
-        manager.program.put(id, date);
-        return id;
-    }
-
-    public static TaskId scheduleTaskTimerAt(Runnable runnable, String name, long delay, long timer, Date date) {
-        TaskManager manager = Jarvis.getTaskManager();
-        TaskId id = TaskId.generate();
-        manager.tasks.put(id, new Task(id, runnable, delay, timer).setTaskName(name));
-        manager.program.put(id, date);
-        return id;
-    }
-
-    public static TaskId scheduleTask(TaskParameter parameter, String name) {
-        TaskManager manager = Jarvis.getTaskManager();
-        TaskId id = TaskId.generate();
-        manager.tasks.put(id, parameter.toTask(id).setTaskName(name));
-        manager.program.put(id, parameter.getDate());
-        return id;
+        return scheduleTaskTimer(runnable, null, delay, timer);
     }
 
     public static TaskId scheduleTask(Runnable runnable, String name) {
-        return scheduleTaskAt(runnable, name, new Date());
+        return scheduleTaskLater(runnable, name, 0);
     }
 
     public static TaskId scheduleTaskLater(Runnable runnable, String name, long delay) {
-        return scheduleTaskLaterAt(runnable, name, delay, new Date());
+        return Jarvis.getTaskManager().schedule(runnable, name, delay, 0);
     }
 
     public static TaskId scheduleTaskTimer(Runnable runnable, String name, long delay, long timer) {
-        return scheduleTaskTimerAt(runnable, name, delay, timer, new Date());
+        if (timer <= 0)
+            throw new IllegalArgumentException("timer must be positive");
+        return Jarvis.getTaskManager().schedule(runnable, name, delay, timer);
     }
 
+    /**
+     * Cancel a task which has not started yet, or stop a repeating task. A task already running finishes normally.
+     */
     public static void cancelTask(TaskId id) {
-        Task task = getTask(id);
-        if (task != null && task.getInfo().getState() == Task.TaskState.RUNNING) {
-            task.interrupt();
-        }
+        if (id == null)
+            return;
+        ScheduledFuture<?> future = Jarvis.getTaskManager().tasks.remove(id);
+        if (future != null)
+            future.cancel(false);
     }
 }
