@@ -108,6 +108,15 @@ for service in bluetooth hciuart triggerhappy ModemManager cups cups-browsed; do
     systemctl disable --now "$service.service" 2>/dev/null || true
 done
 
+# Wi-Fi configured with wpa_supplicant.conf and dhcpcd : Raspberry Pi's dhcpcd5 started wpa_supplicant on wlan0,
+# Debian's dhcpcd (trixie and later) doesn't. The per-interface service does it instead.
+if [[ -f /etc/wpa_supplicant/wpa_supplicant.conf ]] && systemctl is-enabled dhcpcd >/dev/null 2>&1 \
+        && ! ls /lib/dhcpcd/dhcpcd-hooks/ 2>/dev/null | grep -q wpa_supplicant; then
+    log "Wi-Fi : wpa_supplicant started on wlan0"
+    [[ -e /etc/wpa_supplicant/wpa_supplicant-wlan0.conf ]] || ln -s wpa_supplicant.conf /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+    systemctl enable --now wpa_supplicant@wlan0.service
+fi
+
 log "Swap in compressed RAM (zram) instead of the SD card"
 if dpkg -s rpi-swap >/dev/null 2>&1; then
     echo "Swap already managed by rpi-swap (zram) : nothing to do."
@@ -201,7 +210,13 @@ else
 fi
 
 log "Automatic updates from git (branch ${JARVIS_BRANCH:-master}, every 15 min)"
-ln -sf "$REPO_DIR/deploy/raspberrypi/jarvis-update.sh" /usr/local/sbin/jarvis-update
+# A launcher rather than a link : it works even if git didn't keep the executable bit of the script
+rm -f /usr/local/sbin/jarvis-update
+cat > /usr/local/sbin/jarvis-update <<EOF
+#!/bin/sh
+exec /bin/bash "$REPO_DIR/deploy/raspberrypi/jarvis-update.sh" "\$@"
+EOF
+chmod 755 /usr/local/sbin/jarvis-update
 cat > /etc/systemd/system/jarvis-update.service <<EOF
 [Unit]
 Description=Update JARVIS from git (pull, rebuild, restart)
